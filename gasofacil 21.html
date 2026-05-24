@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GasoFácil</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --fuel: #f97316;
+    --fuel-dark: #c2410c;
+    --green: #22c55e;
+    --yellow: #eab308;
+    --red: #ef4444;
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --surface2: #1c1c28;
+    --text: #f1f0ee;
+    --muted: #6b6b80;
+  }
+  body.light {
+    --bg: #f4f4f8;
+    --surface: #ffffff;
+    --surface2: #f0f0f5;
+    --text: #111118;
+    --muted: #888899;
+  }
+  body.light .leaflet-container { background: #e8e8f0 !important; }
+  body.light .custom-popup .leaflet-popup-content-wrapper { background: #fff; border-color: #e0e0e8; color: #111; }
+  body.light .custom-popup .leaflet-popup-tip { background: #fff; }
+
+  .theme-btn {
+    background: var(--surface2); border: 1px solid #ffffff15; border-radius: 10px;
+    color: var(--text); font-size: 1.1rem; width: 38px; height: 38px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.2s;
+  }
+  body.light .theme-btn { border-color: #00000015; }
+  .theme-btn:hover { transform: scale(1.1); }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; background: var(--surface);
+    border-bottom: 1px solid #ffffff10; position: sticky; top: 0; z-index: 1000;
+  }
+  .logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.4rem; display: flex; align-items: center; gap: 8px; }
+  .logo span { background: linear-gradient(135deg, var(--fuel), #fbbf24); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .logo-icon { width: 32px; height: 32px; background: linear-gradient(135deg, var(--fuel), #fbbf24); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+
+  .header-right { display: flex; align-items: center; gap: 10px; }
+
+  /* COUNTRY BADGE */
+  .country-badge {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface2); border: 1px solid #ffffff15;
+    border-radius: 10px; padding: 7px 12px;
+    font-size: 0.82rem; color: var(--text);
+    transition: all 0.3s ease;
+  }
+  .country-badge.detecting { border-color: var(--fuel); animation: pulse 1.2s infinite; }
+  .country-flag { font-size: 1.1rem; }
+  .country-name { font-weight: 500; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+
+  .locate-btn {
+    background: linear-gradient(135deg, var(--fuel), #fbbf24); border: none; border-radius: 10px;
+    color: white; font-family: 'DM Sans', sans-serif; font-weight: 500; font-size: 0.85rem;
+    padding: 9px 16px; cursor: pointer; display: flex; align-items: center; gap: 6px;
+    transition: opacity 0.2s, transform 0.1s;
+  }
+  .locate-btn:hover { opacity: 0.9; transform: scale(1.02); }
+  .locate-btn:active { transform: scale(0.98); }
+
+  .app { display: grid; grid-template-columns: 340px 1fr; height: calc(100vh - 65px); }
+
+  .sidebar { background: var(--surface); border-right: 1px solid #ffffff10; display: flex; flex-direction: column; overflow: hidden; }
+
+  .search-bar { padding: 16px; border-bottom: 1px solid #ffffff08; }
+  .search-bar input {
+    width: 100%; background: var(--surface2); border: 1px solid #ffffff15;
+    border-radius: 10px; padding: 10px 14px; color: var(--text);
+    font-family: 'DM Sans', sans-serif; font-size: 0.9rem; outline: none; transition: border-color 0.2s;
+  }
+  .search-bar input:focus { border-color: var(--fuel); }
+  .search-bar input::placeholder { color: var(--muted); }
+
+  .filters { padding: 12px 16px; display: flex; gap: 8px; border-bottom: 1px solid #ffffff08; flex-wrap: wrap; }
+  .filter-chip {
+    padding: 5px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: 500;
+    border: 1px solid #ffffff20; background: transparent; color: var(--muted); cursor: pointer; transition: all 0.2s;
+  }
+  .filter-chip.active { background: var(--fuel); border-color: var(--fuel); color: white; }
+  .filter-chip:hover:not(.active) { border-color: var(--fuel); color: var(--fuel); }
+
+  /* FUEL TYPE TOGGLE */
+  .fuel-toggle { display: flex; gap: 6px; padding: 12px 16px 0; }
+  .fuel-btn {
+    flex: 1; padding: 9px; border-radius: 10px; border: 2px solid #ffffff15;
+    background: transparent; color: var(--muted); font-family: 'DM Sans', sans-serif;
+    font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .fuel-btn.active-nafta { background: #f9731620; border-color: var(--fuel); color: var(--fuel); }
+  .fuel-btn.active-gnc   { background: #3b82f620; border-color: #3b82f6;    color: #3b82f6; }
+  .fuel-btn:hover:not(.active-nafta):not(.active-gnc) { border-color: #ffffff40; color: var(--text); }
+  .compressor-badge { padding: 3px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; white-space: nowrap; }
+  .compressor-badge.ok     { background: #22c55e20; color: var(--green);  border: 1px solid #22c55e30; }
+  .compressor-badge.slow   { background: #eab30820; color: var(--yellow); border: 1px solid #eab30830; }
+  .compressor-badge.broken { background: #ef444420; color: var(--red);    border: 1px solid #ef444430; }
+  .compressor-badge.closed { background: #6b6b8020; color: var(--muted);  border: 1px solid #6b6b8030; }
+
+  /* COUNTRY INFO BAR */
+  .country-info-bar {
+    padding: 10px 16px; background: #f9731610; border-bottom: 1px solid #f9731620;
+    display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--fuel);
+    transition: all 0.4s ease; overflow: hidden; max-height: 0; opacity: 0;
+  }
+  .country-info-bar.visible { max-height: 60px; opacity: 1; }
+
+  .list-title { padding: 14px 16px 8px; font-family: 'Syne', sans-serif; font-size: 0.75rem; font-weight: 700; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+
+  .stations-list { flex: 1; overflow-y: auto; padding: 0 12px 12px; }
+  .stations-list::-webkit-scrollbar { width: 4px; }
+  .stations-list::-webkit-scrollbar-track { background: transparent; }
+  .stations-list::-webkit-scrollbar-thumb { background: #ffffff15; border-radius: 4px; }
+
+  .station-card {
+    background: var(--surface2); border: 1px solid #ffffff08; border-radius: 14px;
+    padding: 14px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s;
+    animation: slideIn 0.3s ease both;
+  }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+  .station-card:hover { border-color: var(--fuel); transform: translateX(3px); background: #1f1f2e; }
+  .station-card.selected { border-color: var(--fuel); background: #1f1f2e; }
+
+  .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+  .station-name { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.95rem; line-height: 1.2; }
+  .station-brand { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+
+  .status-badge { padding: 3px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em; white-space: nowrap; }
+  .status-badge.open { background: #22c55e20; color: var(--green); border: 1px solid #22c55e30; }
+  .status-badge.closed { background: #ef444420; color: var(--red); border: 1px solid #ef444430; }
+  .status-badge.h24 { background: #f9731620; color: var(--fuel); border: 1px solid #f9731630; }
+
+  .card-info { display: flex; gap: 12px; align-items: center; }
+  .crowd-bar { flex: 1; height: 6px; background: #ffffff10; border-radius: 3px; overflow: hidden; }
+  .crowd-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+  .crowd-fill.low { background: var(--green); }
+  .crowd-fill.mid { background: var(--yellow); }
+  .crowd-fill.high { background: var(--red); }
+  .crowd-label { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
+
+  .card-bottom { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid #ffffff08; }
+  .price-tag { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 1rem; color: var(--fuel); }
+  .price-label { font-size: 0.7rem; color: var(--muted); }
+  .distance { font-size: 0.78rem; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+
+  #map { width: 100%; height: 100%; z-index: 1; }
+  .leaflet-container { background: #0d0d18 !important; }
+
+  .custom-popup .leaflet-popup-content-wrapper {
+    background: var(--surface2); border: 1px solid #ffffff15; border-radius: 14px;
+    box-shadow: 0 20px 40px #00000080; color: var(--text); padding: 0;
+  }
+  .custom-popup .leaflet-popup-tip { background: var(--surface2); }
+  .popup-inner { padding: 16px; min-width: 200px; }
+  .popup-name { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 1rem; margin-bottom: 4px; }
+  .popup-brand { font-size: 0.75rem; color: var(--muted); margin-bottom: 12px; }
+  .popup-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .popup-price { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.3rem; color: var(--fuel); }
+  .popup-btn { width: 100%; margin-top: 10px; padding: 9px; background: linear-gradient(135deg, var(--fuel), #fbbf24); border: none; border-radius: 8px; color: white; font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 0.85rem; cursor: pointer; }
+
+  .fuel-marker { width: 36px; height: 36px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 4px 12px #00000060; }
+  .fuel-marker-inner { transform: rotate(45deg); font-size: 14px; }
+
+  /* FAVORITES & RANKING */
+  .fav-btn {
+    background: none; border: none; font-size: 1.2rem; cursor: pointer;
+    transition: transform 0.2s; padding: 2px;
+  }
+  .fav-btn:hover { transform: scale(1.2); }
+
+  .tab-bar {
+    display: flex; border-bottom: 1px solid #ffffff08;
+    padding: 0 16px; gap: 0;
+  }
+  .tab-btn {
+    flex: 1; padding: 10px 8px; background: none; border: none;
+    border-bottom: 2px solid transparent; color: var(--muted);
+    font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 0.82rem;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .tab-btn.active { color: var(--fuel); border-bottom-color: var(--fuel); }
+
+  .ranking-badge {
+    width: 24px; height: 24px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; font-weight: 800; flex-shrink: 0;
+  }
+  .ranking-badge.gold   { background: #fbbf2430; color: #fbbf24; }
+  .ranking-badge.silver { background: #94a3b830; color: #94a3b8; }
+  .ranking-badge.bronze { background: #b45309; color: #fde68a; }
+  .ranking-badge.other  { background: #ffffff10; color: var(--muted); }
+
+  /* REPORT MODAL */
+  .modal-overlay {
+    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: #00000080; z-index: 9998; align-items: flex-end; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--surface); border-radius: 20px 20px 0 0;
+    padding: 24px; width: 100%; max-width: 420px;
+    border-top: 1px solid #ffffff15;
+    animation: slideUp 0.3s ease;
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .modal-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.1rem; margin-bottom: 6px; }
+  .modal-subtitle { color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; }
+  .report-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .report-btn {
+    padding: 14px 10px; border-radius: 12px; border: 2px solid #ffffff15;
+    background: var(--surface2); color: var(--text);
+    font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 0.85rem;
+    cursor: pointer; transition: all 0.2s; text-align: center;
+  }
+  .report-btn:hover, .report-btn.selected { border-color: var(--fuel); background: #f9731615; }
+  .report-btn .report-icon { font-size: 1.4rem; display: block; margin-bottom: 4px; }
+  .modal-actions { display: flex; gap: 10px; }
+  .modal-cancel { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #ffffff15; background: transparent; color: var(--muted); font-family: 'DM Sans', sans-serif; font-weight: 600; cursor: pointer; }
+  .modal-confirm { flex: 2; padding: 12px; border-radius: 10px; border: none; background: linear-gradient(135deg, var(--fuel), #fbbf24); color: white; font-family: 'DM Sans', sans-serif; font-weight: 700; cursor: pointer; }
+
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--surface2); border: 1px solid #ffffff15; border-radius: 12px; padding: 12px 20px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; z-index: 9999; transition: transform 0.3s ease; white-space: nowrap; }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 700px) {
+    .app { display: block; position: relative; height: calc(100vh - 65px); }
+    #map {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      height: 100% !important;
+      z-index: 1;
+    }
+    .sidebar {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      height: 50vh;
+      border-right: none; border-top: 1px solid #ffffff20;
+      border-radius: 20px 20px 0 0;
+      background: var(--surface);
+      z-index: 500;
+      transition: height 0.3s ease;
+      overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+    .sidebar.expanded { height: 88vh; }
+    .sidebar.collapsed { height: 52px; }
+    .drag-handle {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px 6px; cursor: pointer; flex-shrink: 0;
+    }
+    .drag-handle-bar {
+      width: 40px; height: 5px; background: #ffffff30; border-radius: 3px;
+      margin: 0 auto;
+    }
+    .toggle-sheet-btn {
+      background: var(--fuel); border: none; border-radius: 20px;
+      color: white; font-size: 0.75rem; font-weight: 700;
+      padding: 4px 12px; cursor: pointer;
+    }
+    .country-name { display: none; }
+    .stations-list { overflow-y: auto; flex: 1; }
+    .search-bar, .filters, .country-info-bar, .list-title { flex-shrink: 0; }
+  }
+  @media (min-width: 701px) {
+    .drag-handle { display: none; }
+    .toggle-sheet-btn { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">⛽</div>
+    <span>GasoFácil</span>
+  </div>
+  <div class="header-right">
+    <div class="country-badge detecting" id="countryBadge">
+      <span class="country-flag" id="countryFlag">🌍</span>
+      <span class="country-name" id="countryName">Detectando...</span>
+    </div>
+    <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Cambiar tema">🌙</button>
+    <button class="locate-btn" onclick="locateMe()">📍 Mi ubicación</button>
+  </div>
+</header>
+
+<div class="app">
+  <div class="sidebar" id="sidebar">
+    <div class="drag-handle" id="dragHandle" onclick="toggleSheet()">
+      <div style="width:40px"></div>
+      <div class="drag-handle-bar"></div>
+      <button class="toggle-sheet-btn" id="sheetBtn">▲ Ver lista</button>
+    </div>
+    <div class="search-bar">
+      <input type="text" id="searchInput" placeholder="🔍  Buscar barrio, dirección..." oninput="handleSearch(this.value)">
+    </div>
+    <div class="fuel-toggle">
+      <button class="fuel-btn active-nafta" id="btn-nafta" onclick="setFuelType('nafta')">⛽ Nafta</button>
+      <button class="fuel-btn" id="btn-gnc" onclick="setFuelType('gnc')">🔵 GNC</button>
+    </div>
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tab-estaciones" onclick="setTab('estaciones')">⛽ Estaciones</button>
+      <button class="tab-btn" id="tab-favoritas" onclick="setTab('favoritas')">⭐ Favoritas</button>
+      <button class="tab-btn" id="tab-ranking" onclick="setTab('ranking')">🏆 Ranking</button>
+    </div>
+    <div class="filters" id="filtersRow">
+      <button class="filter-chip active" onclick="setFilter('todas', this)" id="f-todas">Todas</button>
+      <button class="filter-chip" onclick="setFilter('abiertas', this)" id="f-abiertas">Abiertas</button>
+      <button class="filter-chip" onclick="setFilter('baratas', this)" id="f-baratas">Más baratas</button>
+      <button class="filter-chip" onclick="setFilter('cercanas', this)" id="f-cercanas">Cercanas</button>
+    </div>
+    <div class="country-info-bar" id="countryInfoBar">
+      <span id="countryInfoText"></span>
+    </div>
+    <div class="list-title" id="listTitle">📍 Gasolineras cercanas</div>
+    <div class="stations-list" id="stationsList"></div>
+  </div>
+  <div id="map"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── DATOS POR PAÍS ──────────────────────────────────────────────
+const countryData = {
+  ES: {
+    name: "España", flag: "🇪🇸", currency: "€", center: [40.4168, -3.7038], zoom: 13,
+    lang: { all:"Todas", open:"Abiertas", cheap:"Más baratas", near:"Cercanas", nearby:"Gasolineras cercanas", open_lbl:"Abierta", closed_lbl:"Cerrada", h24_lbl:"24h", crowd:"Afluencia", high_crowd:"Mucha cola", mid_crowd:"Cola media", low_crowd:"Sin cola", per_liter:"por litro", directions:"Cómo llegar →", located:"¡Ubicación encontrada!", no_geo:"Tu navegador no soporta geolocalización", no_loc:"No se pudo obtener tu ubicación", you_are:"Estás aquí", info:"Datos de gasolineras de España (ejemplo)" },
+    stations: [
+      { id:1, name:"Repsol Centro",    brand:"Repsol",    lat:40.4168, lng:-3.7038, status:"open",   crowd:20, price:1.639, dist:0.3 },
+      { id:2, name:"Cepsa Gran Vía",   brand:"Cepsa",     lat:40.4200, lng:-3.7100, status:"open",   crowd:75, price:1.619, dist:0.7 },
+      { id:3, name:"BP Castellana",    brand:"BP",        lat:40.4300, lng:-3.6900, status:"h24",    crowd:45, price:1.655, dist:1.2 },
+      { id:4, name:"Galp Atocha",      brand:"Galp",      lat:40.4060, lng:-3.6890, status:"closed", crowd:0,  price:1.609, dist:1.5 },
+      { id:5, name:"Shell Retiro",     brand:"Shell",     lat:40.4150, lng:-3.6800, status:"open",   crowd:90, price:1.672, dist:1.8 },
+      { id:6, name:"Repsol Vallecas",  brand:"Repsol",    lat:40.4050, lng:-3.6700, status:"open",   crowd:30, price:1.629, dist:2.1 },
+      { id:7, name:"Carrefour Energy", brand:"Carrefour", lat:40.4250, lng:-3.7200, status:"open",   crowd:55, price:1.589, dist:2.4 },
+    ]
+  },
+  FR: {
+    name: "France", flag: "🇫🇷", currency: "€", center: [48.8566, 2.3522], zoom: 13,
+    lang: { all:"Toutes", open:"Ouvertes", cheap:"Moins chères", near:"Proches", nearby:"Stations proches", open_lbl:"Ouverte", closed_lbl:"Fermée", h24_lbl:"24h", crowd:"Affluence", high_crowd:"Beaucoup de queue", mid_crowd:"File moyenne", low_crowd:"Pas de queue", per_liter:"par litre", directions:"Itinéraire →", located:"Position trouvée !", no_geo:"Géolocalisation non supportée", no_loc:"Position introuvable", you_are:"Vous êtes ici", info:"Données de stations en France (exemple)" },
+    stations: [
+      { id:1, name:"Total Louvre",      brand:"TotalEnergies", lat:48.8606, lng:2.3376, status:"open",   crowd:30, price:1.849, dist:0.4 },
+      { id:2, name:"BP Champs-Élysées", brand:"BP",            lat:48.8698, lng:2.3078, status:"h24",    crowd:60, price:1.869, dist:1.1 },
+      { id:3, name:"Esso Bastille",     brand:"Esso",          lat:48.8533, lng:2.3692, status:"open",   crowd:45, price:1.829, dist:1.6 },
+      { id:4, name:"Total Montmartre",  brand:"TotalEnergies", lat:48.8867, lng:2.3431, status:"closed", crowd:0,  price:1.839, dist:2.0 },
+      { id:5, name:"Shell Nation",      brand:"Shell",         lat:48.8738, lng:2.2950, status:"open",   crowd:80, price:1.879, dist:2.5 },
+    ]
+  },
+  GB: {
+    name: "United Kingdom", flag: "🇬🇧", currency: "£", center: [51.5074, -0.1278], zoom: 13,
+    lang: { all:"All", open:"Open", cheap:"Cheapest", near:"Nearest", nearby:"Nearby stations", open_lbl:"Open", closed_lbl:"Closed", h24_lbl:"24h", crowd:"Busyness", high_crowd:"Very busy", mid_crowd:"Moderate", low_crowd:"Quiet", per_liter:"per litre", directions:"Get directions →", located:"Location found!", no_geo:"Geolocation not supported", no_loc:"Could not get location", you_are:"You are here", info:"UK station data (example)" },
+    stations: [
+      { id:1, name:"BP Oxford Street",  brand:"BP",      lat:51.5154, lng:-0.1444, status:"open",   crowd:55, price:1.529, dist:0.5 },
+      { id:2, name:"Shell Piccadilly",  brand:"Shell",   lat:51.5099, lng:-0.1337, status:"h24",    crowd:35, price:1.519, dist:0.9 },
+      { id:3, name:"Esso Camden",       brand:"Esso",    lat:51.5390, lng:-0.1426, status:"open",   crowd:70, price:1.509, dist:1.4 },
+      { id:4, name:"Texaco Waterloo",   brand:"Texaco",  lat:51.5036, lng:-0.1143, status:"closed", crowd:0,  price:1.499, dist:1.8 },
+      { id:5, name:"BP Canary Wharf",   brand:"BP",      lat:51.5050, lng:-0.0235, status:"open",   crowd:20, price:1.539, dist:2.3 },
+    ]
+  },
+  DE: {
+    name: "Deutschland", flag: "🇩🇪", currency: "€", center: [52.5200, 13.4050], zoom: 13,
+    lang: { all:"Alle", open:"Geöffnet", cheap:"Günstigste", near:"Nächste", nearby:"Tankstellen in der Nähe", open_lbl:"Geöffnet", closed_lbl:"Geschlossen", h24_lbl:"24h", crowd:"Auslastung", high_crowd:"Viel Andrang", mid_crowd:"Mittel", low_crowd:"Kein Andrang", per_liter:"pro Liter", directions:"Route →", located:"Standort gefunden!", no_geo:"Geolokalisierung nicht verfügbar", no_loc:"Standort konnte nicht ermittelt werden", you_are:"Sie sind hier", info:"Tankstellendaten aus Deutschland (Beispiel)" },
+    stations: [
+      { id:1, name:"Aral Mitte",        brand:"Aral",    lat:52.5200, lng:13.4050, status:"open",   crowd:40, price:1.789, dist:0.3 },
+      { id:2, name:"Shell Potsdamer",   brand:"Shell",   lat:52.5096, lng:13.3762, status:"h24",    crowd:65, price:1.799, dist:0.8 },
+      { id:3, name:"Esso Prenzlauer",   brand:"Esso",    lat:52.5412, lng:13.4250, status:"open",   crowd:25, price:1.769, dist:1.3 },
+      { id:4, name:"Total Charlotten",  brand:"Total",   lat:52.5160, lng:13.3040, status:"closed", crowd:0,  price:1.779, dist:2.0 },
+      { id:5, name:"Aral Kreuzberg",    brand:"Aral",    lat:52.4990, lng:13.4030, status:"open",   crowd:85, price:1.809, dist:2.2 },
+    ]
+  },
+  MX: {
+    name: "México", flag: "🇲🇽", currency: "$", center: [19.4326, -99.1332], zoom: 13,
+    lang: { all:"Todas", open:"Abiertas", cheap:"Más baratas", near:"Cercanas", nearby:"Gasolineras cercanas", open_lbl:"Abierta", closed_lbl:"Cerrada", h24_lbl:"24h", crowd:"Afluencia", high_crowd:"Mucha cola", mid_crowd:"Cola media", low_crowd:"Sin cola", per_liter:"por litro", directions:"Cómo llegar →", located:"¡Ubicación encontrada!", no_geo:"Tu navegador no soporta geolocalización", no_loc:"No se pudo obtener tu ubicación", you_are:"Estás aquí", info:"Datos de gasolineras de México (ejemplo)" },
+    stations: [
+      { id:1, name:"Pemex Centro",      brand:"Pemex",   lat:19.4326, lng:-99.1332, status:"open",   crowd:50, price:24.50, dist:0.4 },
+      { id:2, name:"BP Reforma",        brand:"BP",      lat:19.4270, lng:-99.1670, status:"h24",    crowd:30, price:24.80, dist:1.0 },
+      { id:3, name:"Shell Polanco",     brand:"Shell",   lat:19.4340, lng:-99.1955, status:"open",   crowd:70, price:25.10, dist:1.5 },
+      { id:4, name:"Pemex Coyoacán",    brand:"Pemex",   lat:19.3500, lng:-99.1620, status:"closed", crowd:0,  price:24.30, dist:2.0 },
+      { id:5, name:"Total Santa Fe",    brand:"Total",   lat:19.3620, lng:-99.2590, status:"open",   crowd:40, price:24.90, dist:2.8 },
+    ]
+  },
+  AR: {
+    name: "Argentina", flag: "🇦🇷", currency: "$", center: [-34.6037, -58.3816], zoom: 13,
+    lang: { all:"Todas", open:"Abiertas", cheap:"Más baratas", near:"Cercanas", nearby:"Estaciones cercanas", open_lbl:"Abierta", closed_lbl:"Cerrada", h24_lbl:"24h", crowd:"Afluencia", high_crowd:"Mucha cola", mid_crowd:"Cola media", low_crowd:"Sin cola", per_liter:"por litro", directions:"Cómo llegar →", located:"¡Ubicación encontrada!", no_geo:"Tu navegador no soporta geolocalización", no_loc:"No se pudo obtener tu ubicación", you_are:"Estás aquí", info:"Datos de estaciones de Argentina (ejemplo)" },
+    stations: [
+      { id:1,  name:"YPF Palermo",              brand:"YPF",   type:"nafta", lat:-34.5934, lng:-58.4344, status:"open", crowd:50, price:2300, dist:0.3 },
+      { id:2,  name:"Shell Palermo",             brand:"Shell", type:"nafta", lat:-34.5896, lng:-58.4338, status:"open", crowd:35, price:2500, dist:0.8 },
+      { id:3,  name:"Axion Energy Córdoba",      brand:"Axion", type:"nafta", lat:-34.5968, lng:-58.4378, status:"open", crowd:60, price:2200, dist:1.1 },
+      { id:4,  name:"Kuster Córdoba",            brand:"Kuster",type:"nafta", lat:-34.5972, lng:-58.4355, status:"open", crowd:40, price:2100, dist:1.2 },
+      { id:5,  name:"Jajam Honduras",            brand:"Jajam", type:"nafta", lat:-34.5882, lng:-58.4296, status:"open", crowd:55, price:2300, dist:1.5 },
+      { id:6,  name:"Shell Floresta",            brand:"Shell", type:"nafta", lat:-34.6320, lng:-58.4780, status:"open", crowd:40, price:2500, dist:2.1 },
+      { id:7,  name:"Shell Boedo",               brand:"Shell", type:"nafta", lat:-34.6280, lng:-58.4190, status:"open", crowd:35, price:2500, dist:2.3 },
+      { id:8,  name:"Shell Villa del Parque",    brand:"Shell", type:"nafta", lat:-34.6050, lng:-58.4890, status:"open", crowd:50, price:2500, dist:2.6 },
+      { id:9,  name:"Shell Dellepiane Norte",    brand:"Shell", type:"nafta", lat:-34.6390, lng:-58.4520, status:"open", crowd:45, price:2500, dist:2.8 },
+      { id:10, name:"Shell Dellepiane Sur",      brand:"Shell", type:"nafta", lat:-34.6420, lng:-58.4540, status:"open", crowd:45, price:2500, dist:2.9 },
+      { id:11, name:"Shell Laferrere Norte",     brand:"Shell", type:"nafta", lat:-34.6580, lng:-58.4720, status:"open", crowd:30, price:2500, dist:3.1 },
+      { id:12, name:"Shell Laferrere Sur",       brand:"Shell", type:"nafta", lat:-34.6600, lng:-58.4740, status:"open", crowd:30, price:2500, dist:3.2 },
+      { id:13, name:"Shell Eva Perón Carabobo",  brand:"Shell", type:"nafta", lat:-34.6480, lng:-58.4560, status:"open", crowd:55, price:2500, dist:3.4 },
+      { id:14, name:"Shell Curapaligüe Sur",      brand:"Shell", type:"nafta", lat:-34.6350, lng:-58.4320, status:"open", crowd:40, price:2500, dist:2.5 },
+    ]
+  },
+  BR: {
+    name: "Brasil", flag: "🇧🇷", currency: "R$", center: [-23.5505, -46.6333], zoom: 13,
+    lang: { all:"Todas", open:"Abertas", cheap:"Mais baratas", near:"Mais próximas", nearby:"Postos próximos", open_lbl:"Aberto", closed_lbl:"Fechado", h24_lbl:"24h", crowd:"Movimento", high_crowd:"Muito cheio", mid_crowd:"Movimento médio", low_crowd:"Tranquilo", per_liter:"por litro", directions:"Como chegar →", located:"Localização encontrada!", no_geo:"Seu navegador não suporta geolocalização", no_loc:"Não foi possível obter sua localização", you_are:"Você está aqui", info:"Dados de postos do Brasil (exemplo)" },
+    stations: [
+      { id:1, name:"Petrobras Paulista", brand:"Petrobras", lat:-23.5505, lng:-46.6333, status:"open",   crowd:55, price:6.29, dist:0.4 },
+      { id:2, name:"Shell Paulista",     brand:"Shell",     lat:-23.5620, lng:-46.6550, status:"h24",    crowd:30, price:6.39, dist:1.0 },
+      { id:3, name:"Ipiranga Jardins",   brand:"Ipiranga",  lat:-23.5720, lng:-46.6490, status:"open",   crowd:70, price:6.19, dist:1.4 },
+      { id:4, name:"Petrobras Liberd.",  brand:"Petrobras", lat:-23.5590, lng:-46.6280, status:"closed", crowd:0,  price:6.25, dist:1.7 },
+      { id:5, name:"BR Pinheiros",       brand:"BR",        lat:-23.5660, lng:-46.6830, status:"open",   crowd:40, price:6.22, dist:2.2 },
+      { id:6, name:"Ipiranga Vila Mada", brand:"Ipiranga",  lat:-23.5438, lng:-46.6458, status:"open",   crowd:85, price:6.35, dist:2.6 },
+    ]
+  }
+};
+
+// ─── STATE ───────────────────────────────────────────────────────
+let map, markers = {}, currentFilter = 'todas', searchQuery = '', fuelType = 'nafta';
+let selectedId = null;
+let currentCountry = null;
+let lang = {};
+
+// ─── DETECT COUNTRY ──────────────────────────────────────────────
+async function detectCountry(lat, lng) {
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
+    const data = await res.json();
+    const code = data.address?.country_code?.toUpperCase();
+    return code || 'ES';
+  } catch(e) {
+    return 'ES';
+  }
+}
+
+function applyCountry(code) {
+  const country = countryData[code] || countryData['ES'];
+  currentCountry = code in countryData ? code : 'ES';
+  lang = country.lang;
+
+  // Update badge
+  const badge = document.getElementById('countryBadge');
+  badge.classList.remove('detecting');
+  document.getElementById('countryFlag').textContent = country.flag;
+  document.getElementById('countryName').textContent = country.name;
+
+  // Update info bar
+  const bar = document.getElementById('countryInfoBar');
+  document.getElementById('countryInfoText').textContent = '🌍 ' + lang.info;
+  bar.classList.add('visible');
+
+  // Update filter buttons
+  document.getElementById('f-todas').textContent = lang.all;
+  document.getElementById('f-abiertas').textContent = lang.open;
+  document.getElementById('f-baratas').textContent = lang.cheap;
+  document.getElementById('f-cercanas').textContent = lang.near;
+  document.getElementById('listTitle').textContent = '📍 ' + lang.nearby;
+
+  // Move map
+  map.setView(country.center, country.zoom, { animate: true });
+
+  // Clear old markers
+  Object.values(markers).forEach(m => map.removeLayer(m));
+  markers = {};
+
+  // Add new markers
+  country.stations.forEach(s => addMarker(s, country.currency));
+
+  renderList();
+}
+
+// ─── INIT MAP ────────────────────────────────────────────────────
+// ─── BOTTOM SHEET TOGGLE ─────────────────────────────────────────
+let sheetState = 'half'; // half, expanded, collapsed
+function toggleSheet() {
+  const sidebar = document.getElementById('sidebar');
+  const btn = document.getElementById('sheetBtn');
+  if (sheetState === 'half') {
+    sheetState = 'expanded';
+    sidebar.classList.add('expanded');
+    sidebar.classList.remove('collapsed');
+    btn.textContent = '▼ Ver mapa';
+  } else if (sheetState === 'expanded') {
+    sheetState = 'collapsed';
+    sidebar.classList.remove('expanded');
+    sidebar.classList.add('collapsed');
+    btn.textContent = '▲ Ver lista';
+  } else {
+    sheetState = 'half';
+    sidebar.classList.remove('expanded');
+    sidebar.classList.remove('collapsed');
+    btn.textContent = '▲ Ver lista';
+  }
+}
+
+// ─── DIRECTIONS ──────────────────────────────────────────────────
+let routeLayer = null;
+let routeInfoBar = null;
+
+function openDirections(lat, lng, name) {
+  // Close popup
+  map.closePopup();
+  showToast('📍 Calculando ruta...');
+
+  // Remove previous route
+  if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
+  if (routeInfoBar) { routeInfoBar.remove(); routeInfoBar = null; }
+
+  // Get user location
+  if (!navigator.geolocation) {
+    showToast('⚠️ No se pudo obtener tu ubicación');
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(pos => {
+    const userLat = pos.coords.latitude;
+    const userLng = pos.coords.longitude;
+
+    // Use OSRM free routing API
+    const url = `https://router.project-osrm.org/route/v1/driving/${userLng},${userLat};${lng},${lat}?overview=full&geometries=geojson&steps=true`;
+
+    fetch(url)
+      .then(r => r.json())
+      .then(data => {
+        if (!data.routes || data.routes.length === 0) {
+          showToast('⚠️ No se pudo calcular la ruta'); return;
+        }
+        const route = data.routes[0];
+        const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+        const distKm = (route.distance / 1000).toFixed(1);
+        const mins = Math.round(route.duration / 60);
+
+        // Draw route on map
+        routeLayer = L.polyline(coords, {
+          color: '#f97316', weight: 5, opacity: 0.85,
+          dashArray: null, lineCap: 'round'
+        }).addTo(map);
+
+        // Fit map to route
+        map.fitBounds(routeLayer.getBounds(), { padding: [40, 40] });
+
+        // Show route info bar on map
+        const infoDiv = document.createElement('div');
+        infoDiv.style.cssText = 'position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:1000;background:var(--surface);border:1px solid #ffffff20;border-radius:14px;padding:10px 18px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 20px #00000060;font-family:DM Sans,sans-serif;';
+        infoDiv.innerHTML = `
+          <div style="text-align:center"><div style="font-size:1.1rem;font-weight:800;color:var(--fuel)">${mins} min</div><div style="font-size:0.72rem;color:var(--muted)">tiempo</div></div>
+          <div style="width:1px;height:30px;background:#ffffff15"></div>
+          <div style="text-align:center"><div style="font-size:1.1rem;font-weight:800;color:var(--text)">${distKm} km</div><div style="font-size:0.72rem;color:var(--muted)">distancia</div></div>
+          <div style="width:1px;height:30px;background:#ffffff15"></div>
+          <button onclick="clearRoute()" style="background:var(--surface2);border:1px solid #ffffff20;border-radius:8px;color:var(--muted);padding:6px 10px;cursor:pointer;font-size:0.8rem">✕ Cerrar</button>
+        `;
+        document.getElementById('map').appendChild(infoDiv);
+        routeInfoBar = infoDiv;
+        showToast('🗺️ Ruta a ' + name + ' — ' + mins + ' min');
+      })
+      .catch(() => showToast('⚠️ Error al calcular la ruta'));
+  }, () => showToast('⚠️ No se pudo obtener tu ubicación'));
+}
+
+function clearRoute() {
+  if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
+  if (routeInfoBar) { routeInfoBar.remove(); routeInfoBar = null; }
+}
+
+// ─── FAVORITES & RANKING ─────────────────────────────────────────
+let favorites = new Set();
+let visitCounts = {};
+let currentTab = 'estaciones';
+
+function toggleFav(e, id) {
+  e.stopPropagation();
+  if (favorites.has(id)) {
+    favorites.delete(id);
+    showToast('☆ Eliminado de favoritos');
+  } else {
+    favorites.add(id);
+    showToast('⭐ Guardado en favoritos');
+  }
+  // count visit
+  visitCounts[id] = (visitCounts[id] || 0) + 1;
+  renderList();
+}
+
+function setTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('filtersRow').style.display = tab === 'estaciones' ? 'flex' : 'none';
+  renderList();
+}
+
+function renderRanking() {
+  const el = document.getElementById('stationsList');
+  el.innerHTML = '';
+  const all = getStations();
+  const ranked = [...all].sort((a, b) => (visitCounts[b.id] || 0) - (visitCounts[a.id] || 0));
+  if (ranked.every(s => !visitCounts[s.id])) {
+    el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px 16px;font-size:0.9rem">🏆 Todavía no hay visitas.<br>Guardá favoritos para ver el ranking.</div>';
+    return;
+  }
+  ranked.forEach((s, i) => {
+    const visits = visitCounts[s.id] || 0;
+    const badgeClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : 'other';
+    const card = document.createElement('div');
+    card.className = 'station-card';
+    card.style.animationDelay = i * 0.05 + 's';
+    card.innerHTML = `
+      <div class="card-top" style="align-items:center">
+        <div class="ranking-badge ${badgeClass}">${i + 1}</div>
+        <div style="flex:1;margin-left:10px">
+          <div class="station-name">${s.name}</div>
+          <div class="station-brand">${s.brand} · ${visits} visita${visits !== 1 ? 's' : ''}</div>
+        </div>
+        <div class="price-tag">${s.price.toFixed(0)} $</div>
+      </div>`;
+    card.onclick = () => selectStation(s.id);
+    el.appendChild(card);
+  });
+}
+
+function renderFavorites() {
+  const el = document.getElementById('stationsList');
+  el.innerHTML = '';
+  const favList = getStations().filter(s => favorites.has(s.id));
+  if (favList.length === 0) {
+    el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px 16px;font-size:0.9rem">⭐ No tenés favoritos todavía.<br>Tocá ☆ en una estación para guardarla.</div>';
+    return;
+  }
+  const cur = getCurrency();
+  favList.forEach((s, i) => {
+    const crowdClass = s.crowd >= 70 ? 'high' : s.crowd >= 40 ? 'mid' : 'low';
+    const crowdText = s.crowd >= 70 ? lang.high_crowd || 'Mucha cola' : s.crowd >= 40 ? lang.mid_crowd || 'Cola media' : lang.low_crowd || 'Sin cola';
+    const statusLabel = s.status === 'closed' ? lang.closed_lbl || 'Cerrada' : s.status === 'h24' ? '24h' : lang.open_lbl || 'Abierta';
+    const card = document.createElement('div');
+    card.className = 'station-card';
+    card.style.animationDelay = i * 0.05 + 's';
+    card.innerHTML = `
+      <div class="card-top">
+        <div style="flex:1">
+          <div class="station-name">⭐ ${s.name}</div>
+          <div class="station-brand">${s.brand} · ${s.dist} km</div>
+        </div>
+        <div class="status-badge ${s.status}">${statusLabel}</div>
+      </div>
+      <div class="card-info">
+        <span class="crowd-label">${lang.crowd || 'Afluencia'}</span>
+        <div class="crowd-bar"><div class="crowd-fill ${crowdClass}" style="width:${s.crowd}%"></div></div>
+        <span class="crowd-label">${crowdText}</span>
+      </div>
+      <div class="card-bottom">
+        <div><div class="price-tag">${s.price.toFixed(0)} ${cur}</div><div class="price-label">${lang.per_liter || 'por litro'}</div></div>
+        <button class="fav-btn" onclick="toggleFav(event, ${s.id})">⭐</button>
+      </div>`;
+    card.onclick = () => selectStation(s.id);
+    el.appendChild(card);
+  });
+}
+
+// ─── REPORT SYSTEM ───────────────────────────────────────────────
+let currentReportId = null;
+let selectedReportType = null;
+
+function openReport(id, name) {
+  currentReportId = id;
+  selectedReportType = null;
+  document.getElementById('reportStationName').textContent = name;
+  document.querySelectorAll('.report-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('reportModal').classList.add('show');
+}
+
+function closeReport(e) {
+  if (!e || e.target === document.getElementById('reportModal')) {
+    document.getElementById('reportModal').classList.remove('show');
+  }
+}
+
+function selectReport(btn, type) {
+  document.querySelectorAll('.report-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedReportType = type;
+}
+
+function submitReport() {
+  if (!selectedReportType) { showToast('⚠️ Elegí una opción primero'); return; }
+  const messages = {
+    sin_cola: '🟢 ¡Gracias! Reportaste: Sin cola',
+    cola_media: '🟡 ¡Gracias! Reportaste: Cola media',
+    mucha_cola: '🔴 ¡Gracias! Reportaste: Mucha cola',
+    compresor_roto: '🔵 ¡Gracias! Reportaste: Compresor roto'
+  };
+  document.getElementById('reportModal').classList.remove('show');
+  showToast(messages[selectedReportType]);
+}
+
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  document.getElementById('themeBtn').textContent = isLight ? '☀️' : '🌙';
+  localStorage.setItem && localStorage.setItem('theme', isLight ? 'light' : 'dark');
+}
+
+// Load saved theme
+(function() {
+  try {
+    if (localStorage.getItem('theme') === 'light') {
+      document.body.classList.add('light');
+      document.getElementById('themeBtn') && (document.getElementById('themeBtn').textContent = '☀️');
+    }
+  } catch(e) {}
+})();
+
+function initMap() {
+  map = L.map('map', { zoomControl: false }).setView([40.4168, -3.7038], 5);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap contributors © CARTO', maxZoom: 19
+  }).addTo(map);
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+  // Auto-detect on load
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(async pos => {
+      const { latitude, longitude } = pos.coords;
+      const code = await detectCountry(latitude, longitude);
+      applyCountry(code);
+      addUserMarker(latitude, longitude);
+      map.setView([latitude, longitude], 14, { animate: true });
+      showToast(countryData[code]?.lang.located || '📍 ¡Ubicación encontrada!');
+    }, () => {
+      // Si no da permiso, poner España por defecto
+      applyCountry('ES');
+    });
+  } else {
+    applyCountry('ES');
+  }
+
+  // Set default lang for initial render
+  lang = countryData['ES'].lang;
+  renderList();
+}
+
+// ─── MARKER ─────────────────────────────────────────────────────
+function getMarkerColor(s) {
+  if (s.status === 'closed') return '#ef4444';
+  if (s.crowd >= 70) return '#eab308';
+  return '#22c55e';
+}
+
+function addMarker(s, currency) {
+  const color = getMarkerColor(s);
+  const icon = L.divIcon({
+    className: '',
+    html: `<div class="fuel-marker" style="background:${color}"><div class="fuel-marker-inner">⛽</div></div>`,
+    iconSize: [36, 36], iconAnchor: [18, 36], popupAnchor: [0, -36]
+  });
+  const marker = L.marker([s.lat, s.lng], { icon })
+    .addTo(map)
+    .bindPopup(buildPopup(s, currency), { className: 'custom-popup', maxWidth: 240 });
+  marker.on('click', () => selectStation(s.id));
+  markers[s.id] = marker;
+}
+
+function addUserMarker(lat, lng) {
+  L.circleMarker([lat, lng], {
+    radius: 10, color: '#f97316', fillColor: '#f97316', fillOpacity: 0.4, weight: 2
+  }).addTo(map).bindPopup(`<b>${lang.you_are || 'Estás aquí'}</b>`).openPopup();
+}
+
+function buildPopup(s, currency) {
+  const cur = currency || '€';
+  const crowdText = s.crowd >= 70 ? `🔴 ${lang.high_crowd}` : s.crowd >= 40 ? `🟡 ${lang.mid_crowd}` : `🟢 ${lang.low_crowd}`;
+  const statusText = s.status === 'closed' ? `🔴 ${lang.closed_lbl}` : s.status === 'h24' ? `🟠 ${lang.h24_lbl}` : `🟢 ${lang.open_lbl}`;
+  return `<div class="popup-inner">
+    <div class="popup-name">${s.name}</div>
+    <div class="popup-brand">${s.brand}</div>
+    <div class="popup-row">
+      <div><div class="popup-price">${s.price.toFixed(2)}${cur}</div><div style="font-size:0.7rem;color:#6b6b80">${lang.per_liter}</div></div>
+      <div style="text-align:right;font-size:0.78rem">${statusText}<br>${crowdText}</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="popup-btn" style="flex:1" onclick="openDirections(${s.lat}, ${s.lng}, '${s.name}')">🗺️ Cómo llegar</button>
+      <button class="popup-btn" style="flex:1;background:var(--surface2);color:var(--fuel);border:1px solid var(--fuel)" onclick="openReport(${s.id}, '${s.name}')">📢 Reportar</button>
+    </div>
+  </div>`;
+}
+
+// ─── LIST ────────────────────────────────────────────────────────
+function getStations() {
+  return (countryData[currentCountry] || countryData['ES']).stations;
+}
+
+function getCurrency() {
+  return (countryData[currentCountry] || countryData['ES']).currency;
+}
+
+function getFiltered() {
+  let list = getStations().filter(s => {
+    const matchType = !s.type || s.type === fuelType;
+    const matchSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.brand.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchType && matchSearch;
+  });
+  if (currentFilter === 'abiertas') list = list.filter(s => s.status !== 'closed');
+  if (currentFilter === 'baratas') list = [...list].sort((a,b) => a.price - b.price);
+  if (currentFilter === 'cercanas') list = [...list].sort((a,b) => a.dist - b.dist);
+  return list;
+}
+
+function setFuelType(type) {
+  fuelType = type;
+  document.getElementById('btn-nafta').className = 'fuel-btn' + (type === 'nafta' ? ' active-nafta' : '');
+  document.getElementById('btn-gnc').className   = 'fuel-btn' + (type === 'gnc'   ? ' active-gnc'   : '');
+  // Rebuild markers for new type
+  const country = countryData[currentCountry] || countryData['ES'];
+  Object.values(markers).forEach(m => map.removeLayer(m));
+  markers = {};
+  getFiltered().forEach(s => addMarker(s, country.currency));
+  renderList();
+}
+
+function renderList() {
+  if (currentTab === 'ranking') { renderRanking(); return; }
+  if (currentTab === 'favoritas') { renderFavorites(); return; }
+  const el = document.getElementById('stationsList');
+  const list = getFiltered();
+  const cur = getCurrency();
+  el.innerHTML = '';
+  list.forEach((s, i) => {
+    const crowdClass = s.crowd >= 70 ? 'high' : s.crowd >= 40 ? 'mid' : 'low';
+    const crowdText = s.crowd >= 70 ? lang.high_crowd || 'Mucha cola' : s.crowd >= 40 ? lang.mid_crowd || 'Cola media' : lang.low_crowd || 'Sin cola';
+    const statusLabel = s.status === 'closed' ? lang.closed_lbl || 'Cerrada' : s.status === 'h24' ? lang.h24_lbl || '24h' : lang.open_lbl || 'Abierta';
+    const card = document.createElement('div');
+    card.className = 'station-card' + (selectedId === s.id ? ' selected' : '');
+    card.style.animationDelay = `${i * 0.05}s`;
+    const isFav = favorites.has(s.id);
+    card.innerHTML = `
+      <div class="card-top">
+        <div style="flex:1">
+          <div class="station-name">${s.name}</div>
+          <div class="station-brand">${s.brand} · ${s.dist} km</div>
+        </div>
+        <button class="fav-btn" onclick="toggleFav(event, ${s.id})" title="Favorito">${isFav ? '⭐' : '☆'}</button>
+        <div class="status-badge ${s.status}">${statusLabel}</div>
+      </div>
+      <div class="card-info">
+        <span class="crowd-label">${lang.crowd || 'Afluencia'}</span>
+        <div class="crowd-bar"><div class="crowd-fill ${crowdClass}" style="width:${s.crowd}%"></div></div>
+        <span class="crowd-label">${crowdText}</span>
+      </div>
+      <div class="card-bottom">
+        <div><div class="price-tag">${s.price.toFixed(2)} ${cur}</div><div class="price-label">${lang.per_liter || 'por litro'}</div></div>
+        <div id="card-extra-${s.id}"></div>
+      </div>`;
+    // Set extra info after creating element
+    const extraEl = card.querySelector('#card-extra-' + s.id);
+    if (s.type === 'gnc') {
+      const compMap = { ok: '🔵 Compresor OK', slow: '🟡 Compresor lento', broken: '🔴 Compresor roto', closed: '⚫ Cerrada' };
+      const compClass = s.compressor || 'ok';
+      extraEl.innerHTML = '<span class="compressor-badge ' + compClass + '">' + (compMap[compClass] || '🔵 Compresor OK') + '</span>';
+    } else {
+      extraEl.innerHTML = '<span class="distance">📍 ' + s.dist + ' km</span>';
+    }
+    // dummy line to close the template
+    card.onclick = () => selectStation(s.id);
+    el.appendChild(card);
+  });
+}
+
+function selectStation(id) {
+  selectedId = id;
+  const s = getStations().find(x => x.id === id);
+  if (!s) return;
+  map.setView([s.lat, s.lng], 15, { animate: true });
+  markers[id]?.openPopup();
+  renderList();
+}
+
+function filterStations(q) { searchQuery = q; renderList(); }
+
+let searchTimeout = null;
+function handleSearch(q) {
+  searchQuery = q;
+  renderList();
+  // If query looks like a location (not matching any station name), search the map
+  const matchesStation = getStations().some(s =>
+    s.name.toLowerCase().includes(q.toLowerCase()) ||
+    s.brand.toLowerCase().includes(q.toLowerCase())
+  );
+  if (q.length > 3 && !matchesStation) {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => searchLocation(q), 700);
+  }
+}
+
+async function searchLocation(q) {
+  try {
+    const country = countryData[currentCountry] || countryData['ES'];
+    const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(q + ', Argentina') + '&limit=1');
+    const data = await res.json();
+    if (data && data.length > 0) {
+      const lat = parseFloat(data[0].lat);
+      const lng = parseFloat(data[0].lon);
+      map.setView([lat, lng], 15, { animate: true });
+      showToast('📍 Moviéndome a ' + q);
+    } else {
+      showToast('⚠️ No encontré ese lugar');
+    }
+  } catch(e) {
+    showToast('⚠️ No se pudo buscar');
+  }
+}
+
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderList();
+}
+
+async function locateMe() {
+  if (!navigator.geolocation) { showToast('⚠️ ' + (lang.no_geo || 'Geolocalización no soportada')); return; }
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const { latitude, longitude } = pos.coords;
+    const code = await detectCountry(latitude, longitude);
+    applyCountry(code);
+    addUserMarker(latitude, longitude);
+    map.setView([latitude, longitude], 14, { animate: true });
+    showToast('📍 ' + (lang.located || '¡Ubicación encontrada!'));
+  }, () => showToast('⚠️ ' + (lang.no_loc || 'No se pudo obtener tu ubicación')));
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+initMap();
+</script>
+<!-- REPORT MODAL -->
+<div class="modal-overlay" id="reportModal" onclick="closeReport(event)">
+  <div class="modal">
+    <div class="modal-title">📢 Reportar estado</div>
+    <div class="modal-subtitle" id="reportStationName">Estación</div>
+    <div class="report-options">
+      <button class="report-btn" onclick="selectReport(this, 'sin_cola')">
+        <span class="report-icon">🟢</span>Sin cola
+      </button>
+      <button class="report-btn" onclick="selectReport(this, 'cola_media')">
+        <span class="report-icon">🟡</span>Cola media
+      </button>
+      <button class="report-btn" onclick="selectReport(this, 'mucha_cola')">
+        <span class="report-icon">🔴</span>Mucha cola
+      </button>
+      <button class="report-btn" onclick="selectReport(this, 'compresor_roto')">
+        <span class="report-icon">🔵</span>Compresor roto
+      </button>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeReport()">Cancelar</button>
+      <button class="modal-confirm" onclick="submitReport()">✓ Enviar reporte</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
